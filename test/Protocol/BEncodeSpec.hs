@@ -3,12 +3,14 @@ module Protocol.BEncodeSpec where
 
 import           Test.Hspec
 import           Test.Hspec.QuickCheck
-import           Protocol.BEncode
+import           Protocol.BEncode(BType(..), encode, decode)
 import           Data.Text                     as T
 import           Data.Text.Encoding
 import           Test.QuickCheck.Instances.Text ( )
 import           Data.Map
 import qualified Data.ByteString.Lazy as L
+import Data.Attoparsec.Text.Lazy
+
 
 spec :: Spec
 spec = describe "encode" $ do
@@ -26,5 +28,8 @@ spec = describe "encode" $ do
     prop "string check" $ \s ->
         let encoded = (T.pack . show . T.length) s <> ":" <> s
         in  decodeUtf8 (L.toStrict $ encode (BString s)) `shouldBe` encoded
+    prop "int encode-decode" $  \i -> 
+        let (Right (BInteger j)) = (decode . encode . BInteger) i 
+        in i == j
     -- it "overflow" $ plus2 maxBound `shouldBe` minBound + 1
     -- prop "minus 2" $ \i -> plus2 i - 2 `shouldBe` i

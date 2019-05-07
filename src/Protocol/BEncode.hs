@@ -1,12 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Protocol.BEncode (BType(..), encode) where
+module Protocol.BEncode (BType(..), encode, decode) where
 import Data.Map
 import qualified Data.Text as T
 import qualified Data.ByteString.Lazy as L
 import Data.Text.Encoding
 import Data.ByteString.Builder
 import Data.Int
+import qualified Data.Attoparsec.Text as P
+
 
 {- BEncoding
 
@@ -31,6 +33,7 @@ data BType =
     BInteger !Int64 |
     BList [BType] |
     BDict !(Map T.Text BType)
+    deriving (Eq, Show)
 
 
 encode:: BType -> L.ByteString
@@ -59,13 +62,22 @@ d :: Builder
 d = encodeUtf8Builder "d"
 l :: Builder
 l = encodeUtf8Builder "l"
+
+iBs = toLazyByteString i
+eBs = toLazyByteString e
+
 colon :: Builder
 colon = encodeUtf8Builder ":"
 
 decode:: L.ByteString -> Either String BType
-decode bs = undefined
+decode bs = 
+    let text = decodeUtf8 (L.toStrict bs)
+    in toEither $ P.parse (intParser) text
 
--- decodeString :: BS.ByteString -> Parser BType
--- decodeString bs = 
---     let text = decodeUtf8 bs
---     in undefined
+intParser :: P.Parser BType
+intParser = do
+     BInteger <$> (P.string "i" *> P.signed (P.decimal) <* P.string "e")
+
+toEither:: Show a => P.Result a -> Either String a
+toEither (P.Done _ a) = Right a
+toEither failure  = Left $ "Parsing failed" <> show failure
