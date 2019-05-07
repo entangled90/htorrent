@@ -80,6 +80,8 @@ module Protocol.BEncoding (BType(..), encode, decodeText) where
 
             toEither:: Show a => P.Result a -> Either T.Text a
             toEither (P.Done _ a) = pure a
-            toEither failure  = Left $ T.pack $ "Parsing failed" <> show failure
+            toEither (P.Partial cont)  = toEither $ cont ""
+            toEither (P.Fail notConsumed fails msg) = 
+                Left ("Failed parsing text. Message: [" <> T.pack msg <> "] failures: [" <> foldMap T.pack fails <> "]. Not consumed: [" <> T.take 100 notConsumed <> "]")
 
-        in toEither $ P.parse bTypeParser text
+        in toEither (P.parse bTypeParser text)

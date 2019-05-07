@@ -3,18 +3,19 @@
 
 module Protocol.Info where
 
-    import Data.Text
+    import qualified Data.Text as T
     import Data.Either.Combinators
     import qualified Data.Map.Strict as M
     import Protocol.BEncoding
-
+    import Data.Int
+    import Debug.Trace
     data MetaInfo = MetaInfo {
-        announce:: URL,
-        info:: InfoDictionary
+        announce:: !URL,
+        info:: !InfoDictionary
     }
 
     data InfoDictionary = InfoDictionary{
-        name:: !Text, -- suggested name to save the file
+        name:: !T.Text, -- suggested name to save the file
         pieceLength:: !Integer,
         pieces:: ![SHA1Hash],
         fileInfos:: ![FileInfo]
@@ -22,26 +23,44 @@ module Protocol.Info where
 
     data FileInfo = FileInfo {
         length:: !Int, -- length of the file in bytes
-        path:: ![Text] -- position, for a single file it's an empty list, meaning "this directory"
+        path:: ![T.Text] -- position, for a single file it's an empty list, meaning "this directory"
         }
 
-    newtype URL = URL Text deriving (Eq,Show)
-    newtype SHA1Hash = SHA1Hash Text deriving (Eq,Show)
-    decodeMetaInfo:: Text -> Either Text MetaInfo
+    newtype URL = URL T.Text deriving (Eq,Show)
+    newtype SHA1Hash = SHA1Hash T.Text deriving (Eq,Show)
+    decodeMetaInfo:: T.Text -> Either T.Text MetaInfo
     decodeMetaInfo txt = decodeText txt >>= fromBType
 
-    fromBType :: BType -> Either Text MetaInfo
-    fromBType (BDict map) = do
-        announceUrl <- extractFromDict "announce" (fmap URL . extractString ) (BDict map)
-        info <- maybeToRight "missing info" (M.lookup "info" map)
-        return $ MetaInfo {announce = announceUrl, info = undefined}
-    fromBType other = Left $ pack $ "expected a dictionary, got: " <> show other
+    fromBType :: BType -> Either T.Text MetaInfo
+    fromBType (BDict dict) = do
+        traceM (show dict)
+        announceUrl <- fmap URL (extractFromDict "announce" dict)
+        infoDictionary <- extractFromDict "info"  dict
+        return $ MetaInfo {announce = announceUrl, info = infoDictionary}
+    fromBType other = Left $ T.pack $ "expected a dictionary, got: " <> show other
 
-    extractFromDict :: Text -> (BType -> Maybe b) -> BType ->  Either Text  b
-    extractFromDict key mapper (BDict map) =
-        maybeToRight ("Could not find key "<> key) (M.lookup key map >>= mapper )
-    extractFromDict _ _ _ = Left "Btype is not a map"
+    extractFromDict :: Decoder b => T.Text -> (M.Map T.Text BType) -> Either T.Text  b
+    extractFromDict key dict =
+        maybeToRight ("Could not find key "<> key) (M.lookup key dict) >>= decode
 
-    extractString :: BType -> Maybe Text
-    extractString (BString t) = pure t
-    extractString _ = Nothing
+
+
+    class Decoder a where
+        decode :: BType -> Either T.Text a
+
+
+    instance Decoder T.Text where
+        decode (BString t) = pure t
+        decode other = Left ("Invalid field, expected string got " <> (T.pack $ show other))
+
+    instance Decoder Int64 where
+        decode (BInteger t) = pure t
+        decode other = Left ("Invalid field, expected integer got " <> (T.pack $ show other))
+
+    instance Decoder InfoDictionary where
+        decode (BDict m) = do
+            n <- extractFromDict "name" m
+            p_length <- fmap toInteger (extractFromDict "piece length" m :: Either T.Text Int64)
+            return (InfoDictionary n p_length [] [])
+        decode other = Left ("Invalid field, expected dictionary got " <> T.pack (show other))
+
