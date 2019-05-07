@@ -41,6 +41,7 @@ library:
     - binary
     - parsers
     - attoparsec
+    - either
 
 executables:
   htorrent-exe:

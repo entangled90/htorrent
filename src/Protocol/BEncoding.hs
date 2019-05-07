@@ -1,18 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Protocol.BEncoding (BType(..), encode, decode) where
+module Protocol.BEncoding (BType(..), encode, decodeText) where
 
 
     import Control.Applicative
 
-    import Data.Map
+    import Data.Map.Strict
     import qualified Data.Text as T
-    import qualified Data.ByteString.Lazy as L
-    import Data.Text.Encoding
-    import Data.ByteString.Builder
     import Data.Int
     import qualified Data.Attoparsec.Text as P
-
 
     {- BEncoding
 
@@ -40,63 +36,50 @@ module Protocol.BEncoding (BType(..), encode, decode) where
         deriving (Eq, Show)
 
 
-    encode:: BType -> L.ByteString
-    encode b = toLazyByteString $ encodeBuilder b
-
-    -- builders support fast appending, therefore we convert to bytestring only at the end.
-    encodeBuilder:: BType -> Builder
-    encodeBuilder (BString text) =  intDec (T.length  text) <> colon <> encodeUtf8Builder text
-    encodeBuilder (BInteger int) =  i <> int64Dec int <> e
-    encodeBuilder (BList list) =
-        let encodedElements = foldMap encodeBuilder list
-        in l <> encodedElements <>  e
-    encodeBuilder (BDict dictionary) =
-        let encodeTuple (t, btype) = encodeBuilder (BString t) <> encodeBuilder btype
+    encode:: BType -> T.Text
+    encode (BString text) =   T.pack (show  $ T.length  text) <> ":" <> text
+    encode (BInteger int) =  "i" <> T.pack (show int) <> "e"
+    encode (BList list) =
+        let encodedElements = foldMap encode list
+        in "l" <> encodedElements <>  "e"
+    encode (BDict dictionary) =
+        let encodeTuple (t, btype) = encode (BString t) <> encode btype
             encodedEntries = foldMap encodeTuple (toAscList dictionary)
-        in d <> encodedEntries <> e
+        in  "d" <> encodedEntries <> "e"
 
     -- Internal common constants
-    i :: Builder
-    i = encodeUtf8Builder "i"
-    e :: Builder
-    e = encodeUtf8Builder "e"
-    d :: Builder
-    d = encodeUtf8Builder "d"
-    l :: Builder
-    l = encodeUtf8Builder "l"
 
-    colon :: Builder
-    colon = encodeUtf8Builder ":"
+    -- decode:: L.ByteString -> Either T.Text BType
+    -- decode  = decodeText . decodeUtf8 . L.toStrict
 
-    decode:: L.ByteString -> Either String BType
-    decode bs =
-        let text = decodeUtf8 (L.toStrict bs)
+    decodeText :: T.Text -> Either T.Text BType
+    decodeText text =
+        let
+            bTypeParser :: P.Parser BType
+            bTypeParser = intParser <|> strParser <|> listParser <|> dictParser
+
+            intParser :: P.Parser BType
+            intParser = BInteger <$> (P.string "i" *> P.signed P.decimal <* P.string "e")
+
+            strParser :: P.Parser BType
+            strParser = fmap BString textParser
+
+            listParser :: P.Parser BType
+            listParser = BList <$> (P.string "l" *> many bTypeParser  <* P.string "e")
+
+            dictParser :: P.Parser BType
+            dictParser =
+                let parseTuple = (,) <$> textParser <*> bTypeParser
+                in BDict . fromAscList <$> (P.string "d" *> many parseTuple <* P.string "e")
+
+            textParser :: P.Parser T.Text
+            textParser  = do
+                len <- P.decimal
+                _ <- P.string ":"
+                P.take len
+
+            toEither:: Show a => P.Result a -> Either T.Text a
+            toEither (P.Done _ a) = pure a
+            toEither failure  = Left $ T.pack $ "Parsing failed" <> show failure
+
         in toEither $ P.parse bTypeParser text
-
-    bTypeParser :: P.Parser BType
-    bTypeParser = intParser <|> strParser <|> listParser <|> dictParser
-
-    intParser :: P.Parser BType
-    intParser = BInteger <$> (P.string "i" *> P.signed P.decimal <* P.string "e")
-
-    strParser :: P.Parser BType
-    strParser = fmap BString textParser
-
-    listParser :: P.Parser BType
-    listParser = BList <$> (P.string "l" *> many bTypeParser  <* P.string "e")
-
-    dictParser :: P.Parser BType
-    dictParser = 
-        let parseTuple = (,) <$> textParser <*> bTypeParser
-        in BDict . fromAscList <$> (P.string "d" *> many parseTuple <* P.string "e")
-
-
-    textParser :: P.Parser T.Text
-    textParser  = do 
-        len <- P.decimal
-        _ <- P.string ":"
-        P.take len
-
-    toEither:: Show a => P.Result a -> Either String a
-    toEither (P.Done _ a) = Right a
-    toEither failure  = Left $ "Parsing failed" <> show failure

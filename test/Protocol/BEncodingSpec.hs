@@ -5,21 +5,17 @@ module Protocol.BEncodingSpec where
 
 import           Test.Hspec
 import           Test.Hspec.QuickCheck
-import           Protocol.BEncoding               ( BType(..)
-                                                , encode
-                                                , decode
-                                                )
+import           Protocol.BEncoding
 import           Data.Text                     as T
-import           Data.Text.Encoding
 import           Test.QuickCheck.Instances.Text ( )
 import           Data.Map
-import qualified Data.ByteString.Lazy          as L
 import           Test.QuickCheck
 import Debug.Trace
 
 spec :: Spec
 spec = describe "encode" $ do
     it "basic string check" $ encode (BString "spam") `shouldBe` "4:spam"
+    it "empty string check" $ encode (BString "") `shouldBe` "0:"
     it "basic int check" $ encode (BInteger 36) `shouldBe` "i36e"
     it "basic list check" $
         encode (BList [BString "spam", BString "eggs"]) `shouldBe` "l4:spam4:eggse"
@@ -33,14 +29,14 @@ spec = describe "encode" $ do
     -- PROPS
     prop "string check" $ \s ->
         let encoded = (T.pack . show . T.length) s <> ":" <> s
-        in  decodeUtf8 (L.toStrict $ encode (BString s)) `shouldBe` encoded
-    prop "int encode-decode" $ \i -> case (decode . encode . BInteger) i of
+        in  encode (BString s) `shouldBe` encoded
+    prop "int encode-decode" $ \i -> case (decodeText . encode . BInteger) i of
         Right (BInteger j) -> j == i
         _                  -> False
-    prop "str encode-decode" $ \s -> case (decode . encode . BString) s of
+    prop "str encode-decode" $ \s -> case (decodeText . encode . BString) s of
         Right (BString j) -> s == j
         _                 -> False
-    prop "btype generic encode-decode" $ \s -> case (decode . encode) (btype s) of
+    prop "btype generic encode-decode" $ \s -> case (decodeText . encode) (btype s) of
         (Right j) ->
             -- traceShow j
             j == btype s
