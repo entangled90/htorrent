@@ -8,6 +8,7 @@ import           Data.Text                     as T
 import           Data.Text.Encoding
 import           Test.QuickCheck.Instances.Text ( )
 import           Data.Map
+import qualified Data.ByteString.Lazy as L
 
 spec :: Spec
 spec = describe "encode" $ do
@@ -24,6 +25,6 @@ spec = describe "encode" $ do
         `shouldBe` "d3:cow3:moo4:spam4:eggse"
     prop "string check" $ \s ->
         let encoded = (T.pack . show . T.length) s <> ":" <> s
-        in  decodeUtf8 (encode (BString s)) `shouldBe` encoded
+        in  decodeUtf8 (L.toStrict $ encode (BString s)) `shouldBe` encoded
     -- it "overflow" $ plus2 maxBound `shouldBe` minBound + 1
     -- prop "minus 2" $ \i -> plus2 i - 2 `shouldBe` i

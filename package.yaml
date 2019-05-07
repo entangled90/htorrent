@@ -64,6 +64,7 @@ tests:
     - text
     - quickcheck-instances
     - containers
+    - bytestring
 
     ghc-options:
     - -threaded

@@ -1,11 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Protocol.BEncode (BType, encode) where
+module Protocol.BEncode (BType(..), encode) where
 import Data.Map
 import qualified Data.Text as T
-import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as L
 import Data.Text.Encoding
-import Data.Attoparsec
+import Data.ByteString.Builder
+import Data.Int
 
 {- BEncoding
 
@@ -27,34 +28,44 @@ import Data.Attoparsec
 
 data BType =
     BString !T.Text |
-    BInteger !Int |
+    BInteger !Int64 |
     BList [BType] |
     BDict !(Map T.Text BType)
 
 
-encode:: BType -> BS.ByteString
-encode (BString text) =
-    let complete = encodeInt (T.length  text) <> ":" <> text
-    in encodeUtf8 complete
-encode (BInteger int) =
-    encodeUtf8 ("i" <> encodeInt int <> "e")
-encode (BList list) =
-    let encodedElements = foldMap encode list
-    in encodeUtf8 "l"  <> encodedElements <>  encodeUtf8 "e"
-encode (BDict dictionary) =
-    let encodeTuple (t, btype) = encode (BString t) <> encode btype
+encode:: BType -> L.ByteString
+encode b = toLazyByteString $ encodeBuilder b
+
+-- builders support fast appending, therefore we convert to bytestring only at the end.
+encodeBuilder:: BType -> Builder
+encodeBuilder (BString text) =  intDec (T.length  text) <> colon <> encodeUtf8Builder text
+encodeBuilder (BInteger int) =  i <> int64Dec int <> e
+encodeBuilder (BList list) =
+    let encodedElements = foldMap encodeBuilder list
+    in l <> encodedElements <>  e
+encodeBuilder (BDict dictionary) =
+    let encodeTuple (t, btype) = encodeBuilder (BString t) <> encodeBuilder btype
         encodedEntries = foldMap encodeTuple (toAscList dictionary)
-    in encodeUtf8 "d" <> encodedEntries <> encodeUtf8 "e"
+    in d <> encodedEntries <> e
 
 
-decode:: BS.ByteString -> Either String BType
+
+-- Internal common constants
+i :: Builder
+i = encodeUtf8Builder "i"
+e :: Builder
+e = encodeUtf8Builder "e"
+d :: Builder
+d = encodeUtf8Builder "d"
+l :: Builder
+l = encodeUtf8Builder "l"
+colon :: Builder
+colon = encodeUtf8Builder ":"
+
+decode:: L.ByteString -> Either String BType
 decode bs = undefined
 
-decodeString :: BS.ByteString -> Parser BType
-decodeString bs = 
-    let text = decodeUtf8 bs
-    in undefined
-
-
-encodeInt:: Int -> T.Text
-encodeInt = T.pack . show
+-- decodeString :: BS.ByteString -> Parser BType
+-- decodeString bs = 
+--     let text = decodeUtf8 bs
+--     in undefined
