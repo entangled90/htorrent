@@ -4,7 +4,7 @@ module Protocol.BEncoding (BType(..), encode, decodeText) where
 
 
     import Control.Applicative
-
+    import Data.Bifunctor
     import Data.Map.Strict
     import qualified Data.Text as T
     import Data.Int
@@ -56,32 +56,22 @@ module Protocol.BEncoding (BType(..), encode, decodeText) where
     decodeText text =
         let
             bTypeParser :: P.Parser BType
-            bTypeParser = intParser <|> strParser <|> listParser <|> dictParser
+            bTypeParser = intParser <|> (BString <$> textParser) <|> listParser <|> dictParser
 
             intParser :: P.Parser BType
             intParser = BInteger <$> (P.string "i" *> P.signed P.decimal <* P.string "e")
 
-            strParser :: P.Parser BType
-            strParser = fmap BString textParser
-
             listParser :: P.Parser BType
-            listParser = BList <$> (P.string "l" *> many bTypeParser  <* P.string "e")
+            listParser = BList <$> (P.string "l" *> P.many' bTypeParser  <* P.string "e")
 
             dictParser :: P.Parser BType
             dictParser =
                 let parseTuple = (,) <$> textParser <*> bTypeParser
-                in BDict . fromAscList <$> (P.string "d" *> many parseTuple <* P.string "e")
+                in BDict . fromAscList <$> (P.string "d" *> P.many' parseTuple <* P.string "e")
 
             textParser :: P.Parser T.Text
             textParser  = do
                 len <- P.decimal
                 _ <- P.string ":"
                 P.take len
-
-            toEither:: Show a => P.Result a -> Either T.Text a
-            toEither (P.Done _ a) = pure a
-            toEither (P.Partial cont)  = toEither $ cont ""
-            toEither (P.Fail notConsumed fails msg) = 
-                Left ("Failed parsing text. Message: [" <> T.pack msg <> "] failures: [" <> foldMap T.pack fails <> "]. Not consumed: [" <> T.take 100 notConsumed <> "]")
-
-        in toEither (P.parse bTypeParser text)
+       in first T.pack (P.parseOnly bTypeParser text)

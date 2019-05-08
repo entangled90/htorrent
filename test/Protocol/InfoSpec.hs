@@ -11,10 +11,10 @@ import Debug.Trace
 import Utils
 spec :: Spec
 spec = describe "encode" $ do
-    contents <- runIO $ TIO.readFile "./files/big-file.torrent"
-    it "decode a torrent file" $ 
+    contents <- runIO $ TIO.readFile "./files/ubuntu.torrent"
+    it "decode a torrent file" $
         let decodeResult = decodeText contents
-        in (traceShow decodeResult decodeResult) `shouldSatisfy` isRight
+        in traceShow decodeResult decodeResult `shouldSatisfy` isRight
 
     -- PROPS
     -- prop "string check" $ \s ->

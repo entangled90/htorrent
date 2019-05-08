@@ -5,13 +5,13 @@ module Protocol.Info where
 
     import qualified Data.Text as T
     import Data.Either.Combinators
-    import qualified Data.Map.Strict as M
+    import qualified Data.Map as M
     import Protocol.BEncoding
     import Data.Int
     import Debug.Trace
     data MetaInfo = MetaInfo {
         announce:: !URL,
-        info:: !InfoDictionary
+        info:: InfoDictionary
     }
 
     data InfoDictionary = InfoDictionary{
@@ -39,11 +39,9 @@ module Protocol.Info where
         return $ MetaInfo {announce = announceUrl, info = infoDictionary}
     fromBType other = Left $ T.pack $ "expected a dictionary, got: " <> show other
 
-    extractFromDict :: Decoder b => T.Text -> (M.Map T.Text BType) -> Either T.Text  b
+    extractFromDict :: Decoder b => T.Text -> M.Map T.Text BType -> Either T.Text  b
     extractFromDict key dict =
         maybeToRight ("Could not find key "<> key) (M.lookup key dict) >>= decode
-
-
 
     class Decoder a where
         decode :: BType -> Either T.Text a
@@ -51,11 +49,11 @@ module Protocol.Info where
 
     instance Decoder T.Text where
         decode (BString t) = pure t
-        decode other = Left ("Invalid field, expected string got " <> (T.pack $ show other))
+        decode other = Left ("Invalid field, expected string got " <> T.pack (show other))
 
     instance Decoder Int64 where
         decode (BInteger t) = pure t
-        decode other = Left ("Invalid field, expected integer got " <> (T.pack $ show other))
+        decode other = Left ("Invalid field, expected integer got " <> T.pack (show other))
 
     instance Decoder InfoDictionary where
         decode (BDict m) = do

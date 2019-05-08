@@ -1,12 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE FlexibleInstances #-}
 
 module Protocol.BEncodingSpec where
 
 import           Test.Hspec
 import           Test.Hspec.QuickCheck
 import           Protocol.BEncoding
-import           Data.Text                     as T
 import           Test.QuickCheck.Instances.Text ( )
 import           Data.Map
 import           Test.QuickCheck
@@ -15,26 +13,24 @@ import Utils
 
 spec :: Spec
 spec = describe "BEncoding" $ do
-    it "basic string check" $ encode (BString "spam") `shouldBe` "4:spam"
-    it "empty string check" $ encode (BString "") `shouldBe` "0:"
-    it "basic int check" $ encode (BInteger 36) `shouldBe` "i36e"
-    
-    it "basic list check" $
+    it "should encode a simple string" $ encode (BString "spam") `shouldBe` "4:spam"
+    it "should encode an empty string" $ encode (BString "") `shouldBe` "0:"
+    it "should encode an integer" $ encode (BInteger 36) `shouldBe` "i36e"
+
+    it "should encode a simple list" $
         encode (BList [BString "spam", BString "eggs"]) `shouldBe` "l4:spam4:eggse"
-    it "basic dict check" $
+    it "should encode a simple dict" $
         encode
             (BDict $ fromList[("cow", BString "moo"), ("spam", BString "eggs")])
             `shouldBe` "d3:cow3:moo4:spam4:eggse"
-    it "basic empty dict check" $
+    it "should encode an empty dict" $
         encode(BDict (fromList [])) `shouldBe` "de"
+
+    it "should decode a dict from a torrent torrent" $ decodeText
+        "d8:announce39:http://torrent.ubuntu.com:6969/announce7:comment29:Kubuntu CD cdimage.ubuntu.com13:creation datei1555522851e4:infod6:lengthi1916190720e4:name31:kubuntu-19.04-desktop-amd64.iso12:piece lengthi524288eee" 
+        `shouldSatisfy` isRight
     
-    it "initial torrent check" $ decodeText (
-        "d8:announce39:http://torrent.ubuntu.com:6969/announce7:comment29:Kubuntu CD cdimage.ubuntu.com13:creation datei1555522851ee"
-        ) `shouldSatisfy` isRight
     -- PROPS
-    prop "string check" $ \s ->
-        let encoded = (T.pack . show . T.length) s <> ":" <> s
-        in  encode (BString s) `shouldBe` encoded
     prop "int encode-decode" $ \i -> case (decodeText . encode . BInteger) i of
         Right (BInteger j) -> j == i
         _                  -> False

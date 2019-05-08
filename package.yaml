@@ -42,6 +42,7 @@ library:
     - parsers
     - attoparsec
     - either
+    - bifunctors
 
 executables:
   htorrent-exe:
