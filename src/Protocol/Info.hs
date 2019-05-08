@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-
+{-# LANGUAGE FlexibleInstances #-}
 module Protocol.Info where
 
     import Prelude
@@ -15,22 +15,22 @@ module Protocol.Info where
     data MetaInfo = MetaInfo {
         announce:: !URL,
         info:: InfoDictionary
-    }
+    } deriving (Eq, Show)
 
     data InfoDictionary = InfoDictionary{
-        name:: !T.Text, -- suggested name to save the file
-        pieceLength:: !Integer,
-        pieces:: ![SHA1Hash],
+        name:: !T.Text, -- 'name' -> suggested name to save the file
+        pieceLength:: !Integer, -- 'piece length' -> lenght of each block
+        pieces:: ![SHA1Hash], -- 
         fileInfos:: ![FileInfo]
-    }
+    } deriving (Eq, Show)
 
     data FileInfo = FileInfo {
         length:: !Int, -- length of the file in bytes
         path:: ![T.Text] -- position, for a single file it's an empty list, meaning "this directory"
-        }
+        } deriving (Eq, Show)
 
     newtype URL = URL T.Text deriving (Eq,Show)
-    newtype SHA1Hash = SHA1Hash T.Text deriving (Eq,Show)
+    newtype SHA1Hash = SHA1Hash BS.ByteString deriving (Eq,Show)
     
     decodeMetaInfo:: BS.ByteString -> Either T.Text MetaInfo
     decodeMetaInfo bs  =  (first T.pack (decodeStrict bs)) >>= decodeTo
@@ -43,24 +43,48 @@ module Protocol.Info where
         decodeTo :: BType -> Either T.Text a
 
 
+    instance Decoder BS.ByteString where
+        decodeTo (BString t) = pure t
+        decodeTo other = Left (errorMsg "string" other)
+
     instance Decoder T.Text where
-        decodeTo (BString t) = pure $ E.decodeUtf8 t
-        decodeTo other = Left ("Invalid field, expected string got " <> T.pack (show other))
+        decodeTo btype = E.decodeUtf8 <$> (decodeTo btype)
 
     instance Decoder Int64 where
         decodeTo (BInteger t) = pure t
-        decodeTo other = Left ("Invalid field, expected integer got " <> T.pack (show other))
+        decodeTo other = Left (errorMsg "int64" other)
 
     instance Decoder InfoDictionary where
         decodeTo (BDict m) = do
             n <- extractFromDict "name" m
             p_length <- fmap toInteger (extractFromDict "piece length" m :: Either T.Text Int64)
-            return (InfoDictionary n p_length [] [])
-        decodeTo other = Left ("Invalid field, expected dictionary got " <> T.pack (show other))
+            pieces <- decodeTo $ BDict m
+            infos <- decodeTo $ BDict m
+            return (InfoDictionary n p_length pieces infos)
+        decodeTo other = Left (errorMsg "dict" other)
 
     instance Decoder MetaInfo where
         decodeTo (BDict dict) = do
             announceUrl <- fmap URL (extractFromDict "announce" dict)
             infoDictionary <- extractFromDict "info"  dict
             return $ MetaInfo {announce = announceUrl, info = infoDictionary}
-        decodeTo other = Left $ T.pack $ "expected a dictionary, got: " <> show other
+        decodeTo other = Left (errorMsg "dict" other)
+    
+    instance Decoder [SHA1Hash] where
+        -- splits the pieces string into chunks of 20 chars
+        decodeTo (BDict dict) = do
+            piecesStr <- extractFromDict "pieces" dict
+            return (SHA1Hash <$> (BS.chunksOf 20 piecesStr))
+        decodeTo other = Left (errorMsg "dict" other)
+    instance Decoder ([FileInfo]) where
+        decodeTo (BDict dict) = 
+            case (extractFromDict "length" dict) of 
+                (Right len) -> 
+                    Right [FileInfo (fromIntegral (len :: Int64)) [""]]
+                Left _ -> 
+                    Left "Multiple files not supported yet."
+                    -- extractFromDict "files" dict 
+        decodeTo other = Left (errorMsg "dict" other)
+
+    errorMsg :: T.Text -> BType -> T.Text
+    errorMsg expected bType = "expected a " <> expected <> ", got: " <> T.pack (show bType)
