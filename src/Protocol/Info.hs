@@ -32,16 +32,9 @@ module Protocol.Info where
 
     newtype URL = URL T.Text deriving (Eq,Show)
     newtype SHA1Hash = SHA1Hash T.Text deriving (Eq,Show)
+    
     decodeMetaInfo:: BS.ByteString -> Either T.Text MetaInfo
-    decodeMetaInfo bs  =  (first T.pack (decodeStrict bs)) >>= fromBType
-
-    fromBType :: BType -> Either T.Text MetaInfo
-    fromBType (BDict dict) = do
-        traceM (show dict)
-        announceUrl <- fmap URL (extractFromDict "announce" dict)
-        infoDictionary <- extractFromDict "info"  dict
-        return $ MetaInfo {announce = announceUrl, info = infoDictionary}
-    fromBType other = Left $ T.pack $ "expected a dictionary, got: " <> show other
+    decodeMetaInfo bs  =  (first T.pack (decodeStrict bs)) >>= decodeTo
 
     extractFromDict :: Decoder b => BS.ByteString -> M.Map BS.ByteString BType -> Either T.Text  b
     extractFromDict key dict =
@@ -66,3 +59,10 @@ module Protocol.Info where
             return (InfoDictionary n p_length [] [])
         decodeTo other = Left ("Invalid field, expected dictionary got " <> T.pack (show other))
 
+    instance Decoder MetaInfo where
+        decodeTo (BDict dict) = do
+            traceM (show dict)
+            announceUrl <- fmap URL (extractFromDict "announce" dict)
+            infoDictionary <- extractFromDict "info"  dict
+            return $ MetaInfo {announce = announceUrl, info = infoDictionary}
+        decodeTo other = Left $ T.pack $ "expected a dictionary, got: " <> show other

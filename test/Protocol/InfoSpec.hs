@@ -4,18 +4,21 @@ module Protocol.InfoSpec where
 
 import           Test.Hspec
 import           Protocol.BEncoding
-import           Protocol.Info                  ( )
+import           Protocol.Info
 -- import           Test.QuickCheck.Instances.Text ( )
 import qualified Data.ByteString as BS
+import qualified Data.Text as T
 import Utils
 
 spec :: Spec
 spec = describe "encode" $ do
     contents <- runIO $ BS.readFile "./files/archlinux.torrent"
-    it "decode a torrent file" $ 
+    it "decode a torrent file" $
     -- (Right () :: Either () ())`shouldSatisfy` isRight
-        decodeStrict contents `shouldSatisfy` isRight
+        (name . info ) <$> (decodeMetaInfo contents)  `shouldBe` Right archName
 
+archName :: T.Text 
+archName = "archlinux-2019.05.02-x86_64.iso"
     -- PROPS
     -- prop "string check" $ \s ->
     --     let encoded = (T.pack . show . T.length) s <> ":" <> s
