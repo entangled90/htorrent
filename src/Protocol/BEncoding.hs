@@ -13,7 +13,7 @@ module Protocol.BEncoding (BType(..), encode, encodeStrict, decodeStrict) where
     import Data.ByteString.Builder
     import Data.Int
     import qualified Data.Attoparsec.ByteString as P
-    import Data.Attoparsec.ByteString.Char8
+    import Data.Attoparsec.ByteString.Char8 as P8
 
     {- BEncoding
 
@@ -81,23 +81,23 @@ module Protocol.BEncoding (BType(..), encode, encodeStrict, decodeStrict) where
     bTypeParser = intParser <|> strParser <|> listParser <|> dictParser
 
     intParser :: P.Parser BType
-    intParser = BInteger <$> (P.string "i" *> decimal <* P.string "e")
+    intParser = BInteger <$> (P.string "i" *> (P8.signed P8.decimal)<* P.string "e")
 
     strParser :: P.Parser BType
     strParser = fmap BString textParser
 
     listParser :: P.Parser BType
-    listParser = BList <$> (P.string "l" *> many bTypeParser  <* P.string "e")
+    listParser = BList <$> (P.string "l" *> P.many' bTypeParser  <* P.string "e")
 
     dictParser :: P.Parser BType
     dictParser =
         let parseTuple = (,) <$> textParser <*> bTypeParser
-        in BDict . fromAscList <$> (P.string "d" *> many parseTuple <* P.string "e")
+        in BDict . fromAscList <$> (P.string "d" *> P.many' parseTuple <* P.string "e")
 
 
     textParser :: P.Parser BS.ByteString
     textParser  = do
-        len <- decimal
+        len <- P8.decimal
         _ <- P.string ":"
         P.take (len :: Int)
 
