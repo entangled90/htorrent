@@ -2,13 +2,12 @@
 
 module Protocol.InfoSpec where
 
+import Prelude
 import           Test.Hspec
-import           Protocol.BEncoding
 import           Protocol.Info
 -- import           Test.QuickCheck.Instances.Text ( )
 import qualified Data.ByteString as BS
 import qualified Data.Text as T
-import Utils
 
 spec :: Spec
 spec = describe "encode" $ do

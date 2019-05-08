@@ -1,8 +1,8 @@
--- {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Protocol.Info where
 
+    import Prelude
     import qualified Data.Text as T
     import qualified Data.Text.Encoding as E
     import qualified Data.ByteString as BS
@@ -10,8 +10,7 @@ module Protocol.Info where
     import qualified Data.Map as M
     import Protocol.BEncoding
     import Data.Int
-    import Debug.Trace
-    import Data.Bifunctor
+    import Data.Bifunctor(first)
 
     data MetaInfo = MetaInfo {
         announce:: !URL,
@@ -61,7 +60,6 @@ module Protocol.Info where
 
     instance Decoder MetaInfo where
         decodeTo (BDict dict) = do
-            traceM (show dict)
             announceUrl <- fmap URL (extractFromDict "announce" dict)
             infoDictionary <- extractFromDict "info"  dict
             return $ MetaInfo {announce = announceUrl, info = infoDictionary}

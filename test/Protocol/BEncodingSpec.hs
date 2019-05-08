@@ -2,6 +2,7 @@
 
 module Protocol.BEncodingSpec where
 
+import           Prelude
 import           Test.Hspec
 import           Test.Hspec.QuickCheck
 import           Protocol.BEncoding
@@ -9,7 +10,6 @@ import           Test.QuickCheck.Instances.ByteString ( )
 import           Data.Map
 import qualified Data.ByteString as BS
 import           Test.QuickCheck
-
 import Utils
 
 spec :: Spec
