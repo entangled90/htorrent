@@ -8,7 +8,6 @@ import           Protocol.BEncoding
 import           Test.QuickCheck.Instances.ByteString ( )
 import           Data.Map
 import           Test.QuickCheck
-import Debug.Trace
 import Utils
 
 spec :: Spec
@@ -40,7 +39,7 @@ spec = describe "BEncoding" $ do
         _                 -> False
     prop "btype generic encode-decode" $ \s -> case (decodeStrict . encodeStrict) (btype s) of
         (Right j) -> j == btype s
-        other         -> False
+        _         -> False
 
 newtype Qcheck = Qcheck {btype :: BType} deriving Show
 
