@@ -5,15 +5,15 @@ module Protocol.InfoSpec where
 import           Test.Hspec
 import           Protocol.BEncoding
 import           Protocol.Info                  ( )
-import           Data.Text.IO                  as TIO
 import           Test.QuickCheck.Instances.Text ( )
+import qualified Data.ByteString as BS
 import Debug.Trace
 import Utils
 spec :: Spec
 spec = describe "encode" $ do
-    contents <- runIO $ TIO.readFile "./files/ubuntu.torrent"
+    contents <- runIO $ BS.readFile "./files/ubuntu.torrent"
     it "decode a torrent file" $
-        let decodeResult = decodeText contents
+        let decodeResult = decodeStrict contents
         in traceShow decodeResult decodeResult `shouldSatisfy` isRight
 
     -- PROPS

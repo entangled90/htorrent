@@ -5,7 +5,7 @@ module Protocol.BEncodingSpec where
 import           Test.Hspec
 import           Test.Hspec.QuickCheck
 import           Protocol.BEncoding
-import           Test.QuickCheck.Instances.Text ( )
+import           Test.QuickCheck.Instances.ByteString ( )
 import           Data.Map
 import           Test.QuickCheck
 import Debug.Trace
@@ -26,18 +26,18 @@ spec = describe "BEncoding" $ do
     it "should encode an empty dict" $
         encode(BDict (fromList [])) `shouldBe` "de"
 
-    it "should decode a dict from a torrent torrent" $ decodeText
+    it "should decode a dict from a torrent torrent" $ decodeStrict
         "d8:announce39:http://torrent.ubuntu.com:6969/announce7:comment29:Kubuntu CD cdimage.ubuntu.com13:creation datei1555522851e4:infod6:lengthi1916190720e4:name31:kubuntu-19.04-desktop-amd64.iso12:piece lengthi524288eee" 
         `shouldSatisfy` isRight
     
     -- PROPS
-    prop "int encode-decode" $ \i -> case (decodeText . encode . BInteger) i of
+    prop "int encode-decode" $ \i -> case (decodeStrict . encodeStrict . BInteger) i of
         Right (BInteger j) -> j == i
         _                  -> False
-    prop "str encode-decode" $ \s -> case (decodeText . encode . BString) s of
+    prop "str encode-decode" $ \s -> case (decodeStrict . encodeStrict . BString) s of
         Right (BString j) -> s == j
         _                 -> False
-    prop "btype generic encode-decode" $ \s -> case (decodeText . encode) (btype s) of
+    prop "btype generic encode-decode" $ \s -> case (decodeStrict . encodeStrict) (btype s) of
         (Right j) ->
             -- traceShow j
             j == btype s

@@ -4,11 +4,15 @@
 module Protocol.Info where
 
     import qualified Data.Text as T
+    import qualified Data.Text.Encoding as E
+    import qualified Data.ByteString as BS
     import Data.Either.Combinators
     import qualified Data.Map as M
     import Protocol.BEncoding
     import Data.Int
     import Debug.Trace
+    import Data.Bifunctor
+
     data MetaInfo = MetaInfo {
         announce:: !URL,
         info:: InfoDictionary
@@ -28,8 +32,8 @@ module Protocol.Info where
 
     newtype URL = URL T.Text deriving (Eq,Show)
     newtype SHA1Hash = SHA1Hash T.Text deriving (Eq,Show)
-    decodeMetaInfo:: T.Text -> Either T.Text MetaInfo
-    decodeMetaInfo txt = decodeText txt >>= fromBType
+    decodeMetaInfo:: BS.ByteString -> Either T.Text MetaInfo
+    decodeMetaInfo bs  =  (first T.pack (decodeStrict bs)) >>= fromBType
 
     fromBType :: BType -> Either T.Text MetaInfo
     fromBType (BDict dict) = do
@@ -39,26 +43,26 @@ module Protocol.Info where
         return $ MetaInfo {announce = announceUrl, info = infoDictionary}
     fromBType other = Left $ T.pack $ "expected a dictionary, got: " <> show other
 
-    extractFromDict :: Decoder b => T.Text -> M.Map T.Text BType -> Either T.Text  b
+    extractFromDict :: Decoder b => BS.ByteString -> M.Map BS.ByteString BType -> Either T.Text  b
     extractFromDict key dict =
-        maybeToRight ("Could not find key "<> key) (M.lookup key dict) >>= decode
+        (first E.decodeUtf8 (maybeToRight ("Could not find key "<> key) (M.lookup key dict))) >>= decodeTo
 
     class Decoder a where
-        decode :: BType -> Either T.Text a
+        decodeTo :: BType -> Either T.Text a
 
 
     instance Decoder T.Text where
-        decode (BString t) = pure t
-        decode other = Left ("Invalid field, expected string got " <> T.pack (show other))
+        decodeTo (BString t) = pure $ E.decodeUtf8 t
+        decodeTo other = Left ("Invalid field, expected string got " <> T.pack (show other))
 
     instance Decoder Int64 where
-        decode (BInteger t) = pure t
-        decode other = Left ("Invalid field, expected integer got " <> T.pack (show other))
+        decodeTo (BInteger t) = pure t
+        decodeTo other = Left ("Invalid field, expected integer got " <> T.pack (show other))
 
     instance Decoder InfoDictionary where
-        decode (BDict m) = do
+        decodeTo (BDict m) = do
             n <- extractFromDict "name" m
             p_length <- fmap toInteger (extractFromDict "piece length" m :: Either T.Text Int64)
             return (InfoDictionary n p_length [] [])
-        decode other = Left ("Invalid field, expected dictionary got " <> T.pack (show other))
+        decodeTo other = Left ("Invalid field, expected dictionary got " <> T.pack (show other))
 
