@@ -25,7 +25,7 @@ module Protocol.Info where
     } deriving (Eq, Show)
 
     data FileInfo = FileInfo {
-        length:: !Int, -- length of the file in bytes
+        fileLength:: !Int, -- length of the file in bytes
         path:: ![T.Text] -- position, for a single file it's an empty list, meaning "this directory"
         } deriving (Eq, Show)
 

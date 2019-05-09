@@ -7,15 +7,17 @@ import           Test.Hspec
 import           Protocol.Info
 import qualified Data.ByteString as BS
 import qualified Data.Text as T()
-import Debug.Trace
 
 spec :: Spec
 spec = describe "encode" $ do
     contentsList <- runIO ( traverse BS.readFile files)
     it "decode a torrent file" $
         let 
-            check (c, m) =decodeMetaInfo c `shouldBe` Right (traceShow  m m)
-        in foldMap check (zip contentsList expected)        
+            check (c, m) = 
+                case decodeMetaInfo c of
+                    Right(actual) -> verifyMetaInfo m actual
+                    Left _ -> expectationFailure "decoding failed"
+        in foldMap check (zip contentsList expected)
 
 
 files :: [String]
@@ -33,6 +35,15 @@ expected = [
         (InfoDictionary "kubuntu-19.04-desktop-amd64.iso" 524288 [] [
             FileInfo 1916190720 [""]
         ])]
+verifyMetaInfo:: MetaInfo -> MetaInfo -> Expectation
+verifyMetaInfo e actual = do
+    announce e `shouldBe` announce actual
+    let 
+        expInfo = info e
+        actInfo = info actual
+    name expInfo `shouldBe` name actInfo
+    pieceLength expInfo `shouldBe` pieceLength actInfo
+    length (fileInfos actInfo) `shouldBe` 1
 
     -- PROPS
     -- prop "string check" $ \s ->
