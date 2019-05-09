@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE FlexibleInstances #-}
+
 module Protocol.Info where
 
     import Prelude
@@ -58,9 +58,9 @@ module Protocol.Info where
         decodeTo (BDict m) = do
             n <- extractFromDict "name" m
             p_length <- fmap toInteger (extractFromDict "piece length" m :: Either T.Text Int64)
-            pieces <- decodeTo $ BDict m
-            infos <- decodeTo $ BDict m
-            return (InfoDictionary n p_length pieces infos)
+            hash <- extractHash m
+            infos <- extractInfos m
+            return (InfoDictionary n p_length hash infos)
         decodeTo other = Left (errorMsg "dict" other)
 
     instance Decoder MetaInfo where
@@ -70,21 +70,27 @@ module Protocol.Info where
             return $ MetaInfo {announce = announceUrl, info = infoDictionary}
         decodeTo other = Left (errorMsg "dict" other)
     
-    instance Decoder [SHA1Hash] where
-        -- splits the pieces string into chunks of 20 chars
-        decodeTo (BDict dict) = do
-            piecesStr <- extractFromDict "pieces" dict
-            return (SHA1Hash <$> (BS.chunksOf 20 piecesStr))
-        decodeTo other = Left (errorMsg "dict" other)
-    instance Decoder ([FileInfo]) where
-        decodeTo (BDict dict) = 
-            case (extractFromDict "length" dict) of 
-                (Right len) -> 
-                    Right [FileInfo (fromIntegral (len :: Int64)) [""]]
-                Left _ -> 
-                    Left "Multiple files not supported yet."
-                    -- extractFromDict "files" dict 
-        decodeTo other = Left (errorMsg "dict" other)
+        
+    extractHash :: Dict -> Either T.Text [SHA1Hash]
+    extractHash dict = do
+        piecesStr <- extractFromDict "pieces" dict
+        return (SHA1Hash <$> (chunksOf 20 piecesStr))
 
+    extractInfos :: Dict -> Either T.Text [FileInfo]
+    extractInfos dict= 
+        case (extractFromDict "length" dict) of 
+            (Right len) -> 
+                Right [FileInfo (fromIntegral (len :: Int64)) [""]]
+            Left _ -> 
+                Left "Multiple files not supporteded yet."
     errorMsg :: T.Text -> BType -> T.Text
     errorMsg expected bType = "expected a " <> expected <> ", got: " <> T.pack (show bType)
+
+    -- splits the pieces string into chunks of 20 chars
+    chunksOf :: Int -> BS.ByteString -> [BS.ByteString]
+    chunksOf i bs = 
+        if (BS.length bs == 0) then
+            []
+        else 
+            let (chunk, remaining) = BS.splitAt i bs
+            in chunk : (chunksOf i remaining)

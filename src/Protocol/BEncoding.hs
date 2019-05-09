@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Protocol.BEncoding (BType(..), encode, encodeStrict, decodeStrict) where
+module Protocol.BEncoding (BType(..), encode, encodeStrict, decodeStrict, Dict) where
 
 
     import Control.Applicative
@@ -40,6 +40,7 @@ module Protocol.BEncoding (BType(..), encode, encodeStrict, decodeStrict) where
         BDict !(Map BS.ByteString BType)
         deriving (Eq, Show)
 
+    type Dict = Map BS.ByteString BType
 
     encode:: BType -> LBS.ByteString
     encode  = 
