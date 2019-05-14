@@ -1,19 +1,36 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Protocol.BEncoding (BType(..), encode, encodeStrict, decodeStrict, Dict) where
-
+module Protocol.BEncoding (
+    BType(..)
+    , encode
+    , encodeStrict
+    , decodeStrict
+    , dictionaryParser
+    , Dict
+    , BDecoder
+    , decodeTo
+    , extractFromDict
+    , rawDictionary) where
 
     import Control.Applicative
-    import RIO
-    import Data.Map
+ 
+    import qualified Data.Map as M
+
     import qualified Data.ByteString as BS
     import qualified Data.ByteString.Lazy as LBS
 
-    import Data.Text.Encoding
+    import qualified Data.Text.Encoding as E
+    import qualified Data.Text as T
+
+    import Data.Either.Combinators
+
     import Data.ByteString.Builder
-    import Data.Int
     import qualified Data.Attoparsec.ByteString as P
     import Data.Attoparsec.ByteString.Char8 as P8
+
+    import Data.Bifunctor(first)
+
+    import Data.Int
 
     {- BEncoding
 
@@ -37,15 +54,19 @@ module Protocol.BEncoding (BType(..), encode, encodeStrict, decodeStrict, Dict) 
         BString !BS.ByteString |
         BInteger !Int64 |
         BList ![BType] |
-        BDict !(Map BS.ByteString BType)
+        BDict !(M.Map BS.ByteString BType)
         deriving (Eq, Show)
 
-    type Dict = Map BS.ByteString BType
+    type Dict = M.Map BS.ByteString BType
 
     encode:: BType -> LBS.ByteString
-    encode  = 
+    encode  =
         let
-            [i, e, d, l , colon]  = fmap encodeUtf8Builder ["i", "e", "d", "l", ":"]
+            i = E.encodeUtf8Builder "i"
+            e = E.encodeUtf8Builder "e"
+            d = E.encodeUtf8Builder "d"
+            l = E.encodeUtf8Builder "l"
+            colon = E.encodeUtf8Builder ":"
             -- builders support fast appending, therefore we convert to bytestring only at the end.
             encodeBuilder:: BType -> Builder
             encodeBuilder (BString text) =  intDec (BS.length text) <> colon <> byteString text
@@ -55,38 +76,63 @@ module Protocol.BEncoding (BType(..), encode, encodeStrict, decodeStrict, Dict) 
                 in l <> encodedElements <>  e
             encodeBuilder (BDict dictionary) =
                 let encodeTuple (t, btype) = encodeBuilder (BString t) <> encodeBuilder btype
-                    encodedEntries = foldMap encodeTuple (toAscList dictionary)
+                    encodedEntries = foldMap encodeTuple (M.toAscList dictionary)
                 in d <> encodedEntries <> e
         in toLazyByteString . encodeBuilder
 
     encodeStrict :: BType -> BS.ByteString
     encodeStrict = LBS.toStrict . encode
 
-    decodeStrict:: BS.ByteString -> Either String BType
+    decodeStrict:: BS.ByteString -> Either T.Text BType
     decodeStrict bs =
-        let 
-            textParser :: P.Parser BS.ByteString
-            textParser  = do
-                len <- P8.decimal
-                _ <- P.string ":"
-                P.take (len :: Int)
-    
+        let
             bTypeParser = intParser <|> strParser <|> listParser <|> dictParser
 
-            intParser = BInteger <$> (P.string "i" *> (P8.signed P8.decimal)<* P.string "e")
+            intParser = BInteger <$> (P.string "i" *> P8.signed P8.decimal<* P.string "e")
 
             strParser = fmap BString textParser
 
             listParser = BList <$> (P.string "l" *> P.many' bTypeParser  <* P.string "e")
 
-            dictParser =
-                let parseTuple = (,) <$> textParser <*> bTypeParser
-                in BDict . fromAscList <$> (P.string "d" *> P.many' parseTuple <* P.string "e")
+            dictParser = BDict <$> dictionaryParser bTypeParser
         -- let text = decodeUtf8 (LBS.toStrict bs)
         in toEither $ P.parse bTypeParser bs
 
+    textParser :: P.Parser BS.ByteString
+    textParser  = do
+        len <- P8.decimal
+        _ <- P.string ":"
+        P.take (len :: Int)
 
-    toEither:: Show a => P.Result a -> Either String a
+    dictionaryParser :: P.Parser a -> P.Parser (M.Map BS.ByteString a )
+    dictionaryParser innerParser =
+        let parseTuple = (,) <$> textParser <*> innerParser
+        in M.fromAscList <$> (P.string "d" *> P.many' parseTuple <* P.string "e")
+
+    rawDictionary :: BS.ByteString -> Either T.Text (M.Map BS.ByteString BS.ByteString)
+    rawDictionary bs = toEither $ P.parse (dictionaryParser mempty) bs
+
+    toEither:: Show a => P.Result a -> Either T.Text a
     toEither (P.Done _ a) = Right a
-    toEither failure  = Left $ "Parsing failed: " <> show failure
+    toEither failure  = Left $ "Parsing failed: " <> (T.pack $ show failure)
 
+    extractFromDict :: BDecoder b => BS.ByteString -> M.Map BS.ByteString BType -> Either T.Text  b
+    extractFromDict key dict =
+        first E.decodeUtf8 (maybeToRight ("Could not find key "<> key) (M.lookup key dict)) >>= decodeTo
+
+    class BDecoder a where
+        decodeTo :: BType -> Either T.Text a
+
+    instance BDecoder BS.ByteString where
+        decodeTo (BString t) = pure t
+        decodeTo other = Left (errorMsg "string" other)
+
+    instance BDecoder T.Text where
+        decodeTo btype = E.decodeUtf8 <$> decodeTo btype
+
+    instance BDecoder Int64 where
+        decodeTo (BInteger t) = pure t
+        decodeTo other = Left (errorMsg "int64" other)
+
+    errorMsg :: T.Text -> BType -> T.Text
+    errorMsg expected bType = "expected a " <> expected <> ", got: " <> T.pack (show bType)

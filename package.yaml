@@ -31,7 +31,6 @@ ghc-options:
 - -Wincomplete-uni-patterns
 - -Wpartial-fields
 - -Wredundant-constraints
-- -XNoImplicitPrelude
 
 library:
   source-dirs: src
@@ -44,6 +43,7 @@ library:
     - attoparsec
     - either
     - bifunctors
+    - cryptohash
 
 executables:
   htorrent-exe:

@@ -11,9 +11,11 @@ import           Data.Map
 import qualified Data.ByteString as BS
 import           Test.QuickCheck
 import Utils
+import Protocol.Common
 
 spec :: Spec
 spec = describe "BEncoding" $ do
+    contents <- runIO (fileContents)
     it "should encode a simple string" $ encode (BString "spam") `shouldBe` "4:spam"
     it "should encode an empty string" $ encode (BString "") `shouldBe` "0:"
     it "should encode an integer" $ encode (BInteger (-4)) `shouldBe` "i-4e"
@@ -30,6 +32,8 @@ spec = describe "BEncoding" $ do
     it "should decode a dict from a torrent" $ decodeStrict
         "d8:announce39:http://torrent.ubuntu.com:6969/announce7:comment29:Kubuntu CD cdimage.ubuntu.com13:creation datei1555522851e4:infod6:lengthi1916190720e4:name31:kubuntu-19.04-desktop-amd64.iso12:piece lengthi524288eee"
         `shouldSatisfy` isRight
+    it "should decode torrent files from disk" $ 
+        traverse decodeStrict contents `shouldSatisfy` isRight
 
     -- PROPS
     prop "int encode-decode" $ \i ->
@@ -47,7 +51,6 @@ spec = describe "BEncoding" $ do
     it "decode a torrent file" $ 
     -- (Right () :: Either () ())`shouldSatisfy` isRight
         decodeStrict contents `shouldSatisfy` isRight
-
 
 newtype Qcheck = Qcheck {btype :: BType} deriving Show
 

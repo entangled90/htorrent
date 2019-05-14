@@ -1,26 +1,27 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE GeneralisedNewtypeDeriving #-}
 
 module Protocol.Info where
 
-    import Prelude
+    import qualified Data.Map as M
     import qualified Data.Text as T
-    import qualified Data.Text.Encoding as E
     import qualified Data.ByteString as BS
     import Data.Either.Combinators
-    import qualified Data.Map as M
-    import Protocol.BEncoding
     import Data.Int
-    import Data.Bifunctor(first)
+    import Crypto.Hash.SHA1
+    import Debug.Trace
+    import Protocol.BEncoding
 
     data MetaInfo = MetaInfo {
         announce:: !URL,
-        info:: InfoDictionary
+        info:: !InfoDictionary,
+        infoHash:: !SHA1Hash
     } deriving (Eq, Show)
 
     data InfoDictionary = InfoDictionary{
         name:: !T.Text, -- 'name' -> suggested name to save the file
         pieceLength:: !Integer, -- 'piece length' -> lenght of each block
-        pieces:: ![SHA1Hash], -- 
+        pieces:: ![SHA1Hash],
         fileInfos:: ![FileInfo]
     } deriving (Eq, Show)
 
@@ -30,67 +31,61 @@ module Protocol.Info where
         } deriving (Eq, Show)
 
     newtype URL = URL T.Text deriving (Eq,Show)
+
     newtype SHA1Hash = SHA1Hash BS.ByteString deriving (Eq,Show)
-    
-    decodeMetaInfo:: BS.ByteString -> Either T.Text MetaInfo
-    decodeMetaInfo bs  =  (first T.pack (decodeStrict bs)) >>= decodeTo
 
-    extractFromDict :: Decoder b => BS.ByteString -> M.Map BS.ByteString BType -> Either T.Text  b
-    extractFromDict key dict =
-        (first E.decodeUtf8 (maybeToRight ("Could not find key "<> key) (M.lookup key dict))) >>= decodeTo
+    mkSHA1Hash:: BS.ByteString -> SHA1Hash
+    mkSHA1Hash =  SHA1Hash . hash
 
-    class Decoder a where
-        decodeTo :: BType -> Either T.Text a
+    decodeMetaInfo::
+        BS.ByteString -> -- ^ complete bytestring
+        Either T.Text MetaInfo
+    decodeMetaInfo bs =
+        do
+            infoSHA1 <- hashInfoSection bs
+            let fromDict (BDict dict) = do
+                    announceUrl <- fmap URL (extractFromDict "announce" dict)
+                    infoDictionary <- extractFromDict "info"  dict
+                    return $ MetaInfo {announce = announceUrl, info = infoDictionary, infoHash = infoSHA1}
+                fromDict  other = Left ("expected dict, found: " <> T.pack (show other))
+            decoded <- decodeStrict bs
+            fromDict decoded
 
-
-    instance Decoder BS.ByteString where
-        decodeTo (BString t) = pure t
-        decodeTo other = Left (errorMsg "string" other)
-
-    instance Decoder T.Text where
-        decodeTo btype = E.decodeUtf8 <$> (decodeTo btype)
-
-    instance Decoder Int64 where
-        decodeTo (BInteger t) = pure t
-        decodeTo other = Left (errorMsg "int64" other)
-
-    instance Decoder InfoDictionary where
+    instance BDecoder InfoDictionary where
         decodeTo (BDict m) = do
             n <- extractFromDict "name" m
             p_length <- fmap toInteger (extractFromDict "piece length" m :: Either T.Text Int64)
-            hash <- extractHash m
+            piecesHash <- extractPiecesHash m
             infos <- extractInfos m
-            return (InfoDictionary n p_length hash infos)
-        decodeTo other = Left (errorMsg "dict" other)
+            return (InfoDictionary n p_length piecesHash infos)
+        decodeTo other = Left $ "expected dict, found: " <> (T.pack $ show other)
 
-    instance Decoder MetaInfo where
-        decodeTo (BDict dict) = do
-            announceUrl <- fmap URL (extractFromDict "announce" dict)
-            infoDictionary <- extractFromDict "info"  dict
-            return $ MetaInfo {announce = announceUrl, info = infoDictionary}
-        decodeTo other = Left (errorMsg "dict" other)
-    
-        
-    extractHash :: Dict -> Either T.Text [SHA1Hash]
-    extractHash dict = do
+    extractPiecesHash :: Dict -> Either T.Text [SHA1Hash]
+    extractPiecesHash dict = do
         piecesStr <- extractFromDict "pieces" dict
-        return (SHA1Hash <$> (chunksOf 20 piecesStr))
+        return (SHA1Hash <$> chunksOf 20 piecesStr)
 
     extractInfos :: Dict -> Either T.Text [FileInfo]
-    extractInfos dict= 
-        case (extractFromDict "length" dict) of 
-            (Right len) -> 
+    extractInfos dict=
+        case extractFromDict "length" dict of
+            (Right len) ->
                 Right [FileInfo (fromIntegral (len :: Int64)) [""]]
-            Left _ -> 
+            Left _ ->
                 Left "Multiple files not supporteded yet."
-    errorMsg :: T.Text -> BType -> T.Text
-    errorMsg expected bType = "expected a " <> expected <> ", got: " <> T.pack (show bType)
+
+    hashInfoSection:: BS.ByteString -> Either T.Text SHA1Hash
+    hashInfoSection bs =  do
+        rawDict <- rawDictionary bs
+        traceM (show rawDict)
+        infoBs <-maybeToRight "Could not find key [info]" (M.lookup "info" rawDict)
+        return $ mkSHA1Hash infoBs
+
 
     -- splits the pieces string into chunks of 20 chars
     chunksOf :: Int -> BS.ByteString -> [BS.ByteString]
-    chunksOf i bs = 
-        if (BS.length bs == 0) then
+    chunksOf i bs =
+        if BS.length bs == 0 then
             []
-        else 
+        else
             let (chunk, remaining) = BS.splitAt i bs
-            in chunk : (chunksOf i remaining)
+            in chunk : chunksOf i remaining
