@@ -44,6 +44,8 @@ library:
     - either
     - bifunctors
     - cryptohash
+    - iproute
+    - network
 
 executables:
   htorrent-exe:

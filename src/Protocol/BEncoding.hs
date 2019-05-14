@@ -139,6 +139,9 @@ module Protocol.BEncoding (
     instance BEncoder Int where
         encodeFrom = BInteger . fromIntegral
     
+    instance BEncoder Integer where
+        encodeFrom = BInteger . fromIntegral
+        
     instance BEncoder a => BEncoder [a] where
         encodeFrom = BList . (fmap encodeFrom)
     
