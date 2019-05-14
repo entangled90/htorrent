@@ -3,14 +3,14 @@
 module Protocol.BEncoding (
     BType(..)
     , encode
-    , encodeStrict
-    , decodeStrict
+    , decode
     , dictionaryParser
     , Dict
     , BDecoder
     , decodeTo
-    , extractFromDict
-    , rawDictionary) where
+    , BEncoder
+    , encodeFrom
+    , extractFromDict) where
 
     import Control.Applicative
  
@@ -18,7 +18,6 @@ module Protocol.BEncoding (
 
     import qualified Data.ByteString as BS
     import qualified Data.ByteString.Lazy as LBS
-
     import qualified Data.Text.Encoding as E
     import qualified Data.Text as T
 
@@ -59,7 +58,7 @@ module Protocol.BEncoding (
 
     type Dict = M.Map BS.ByteString BType
 
-    encode:: BType -> LBS.ByteString
+    encode:: BType -> BS.ByteString
     encode  =
         let
             i = E.encodeUtf8Builder "i"
@@ -78,13 +77,10 @@ module Protocol.BEncoding (
                 let encodeTuple (t, btype) = encodeBuilder (BString t) <> encodeBuilder btype
                     encodedEntries = foldMap encodeTuple (M.toAscList dictionary)
                 in d <> encodedEntries <> e
-        in toLazyByteString . encodeBuilder
+        in LBS.toStrict . toLazyByteString . encodeBuilder
 
-    encodeStrict :: BType -> BS.ByteString
-    encodeStrict = LBS.toStrict . encode
-
-    decodeStrict:: BS.ByteString -> Either T.Text BType
-    decodeStrict bs =
+    decode:: BS.ByteString -> Either T.Text BType
+    decode bs =
         let
             bTypeParser = intParser <|> strParser <|> listParser <|> dictParser
 
@@ -109,9 +105,6 @@ module Protocol.BEncoding (
         let parseTuple = (,) <$> textParser <*> innerParser
         in M.fromAscList <$> (P.string "d" *> P.many' parseTuple <* P.string "e")
 
-    rawDictionary :: BS.ByteString -> Either T.Text (M.Map BS.ByteString BS.ByteString)
-    rawDictionary bs = toEither $ P.parse (dictionaryParser mempty) bs
-
     toEither:: Show a => P.Result a -> Either T.Text a
     toEither (P.Done _ a) = Right a
     toEither failure  = Left $ "Parsing failed: " <> (T.pack $ show failure)
@@ -134,5 +127,21 @@ module Protocol.BEncoding (
         decodeTo (BInteger t) = pure t
         decodeTo other = Left (errorMsg "int64" other)
 
+    class BEncoder a where
+        encodeFrom :: a -> BType
+    
+    instance BEncoder BS.ByteString where
+        encodeFrom bs = BString bs
+
+    instance BEncoder T.Text where
+        encodeFrom = encodeFrom . E.encodeUtf8
+
+    instance BEncoder Int where
+        encodeFrom = BInteger . fromIntegral
+    
+    instance BEncoder a => BEncoder [a] where
+        encodeFrom = BList . (fmap encodeFrom)
+    
+    
     errorMsg :: T.Text -> BType -> T.Text
     errorMsg expected bType = "expected a " <> expected <> ", got: " <> T.pack (show bType)
