@@ -46,6 +46,7 @@ library:
     - cryptohash
     - iproute
     - network
+    - http-client
 
 executables:
   htorrent-exe:

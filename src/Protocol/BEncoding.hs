@@ -10,7 +10,9 @@ module Protocol.BEncoding (
     , decodeTo
     , BEncoder
     , encodeFrom
-    , extractFromDict) where
+    , extractFromDict
+    , errorMsg
+    ) where
 
     import Control.Applicative
  
@@ -127,6 +129,15 @@ module Protocol.BEncoding (
         decodeTo (BInteger t) = pure t
         decodeTo other = Left (errorMsg "int64" other)
 
+    instance BDecoder Int where
+        decodeTo (BInteger t) = pure $ fromIntegral t
+        decodeTo other = Left (errorMsg "int" other)
+
+    instance BDecoder a => BDecoder [a] where
+        decodeTo (BList l) = 
+            traverse decodeTo l
+        decodeTo other = Left (errorMsg "list" other)
+    
     class BEncoder a where
         encodeFrom :: a -> BType
     
