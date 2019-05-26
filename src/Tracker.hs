@@ -11,6 +11,10 @@ module Tracker where
   import Protocol.BEncoding
   import Env
   import Data.Text as T
+  import Data.ByteString as BS
+  import           Network.HTTP.Simple
+  import Data.ByteString.Conversion.To
+
 
   data TrackerRequest = TrackerRequest{
       infoHash :: !SHA1Hash
@@ -23,8 +27,8 @@ module Tracker where
     , event :: !(Maybe TrackerEvent)
   }
 
-  fromMetaInfo:: HasConfig e => MetaInfo -> RIO e TrackerRequest
-  fromMetaInfo MetaInfo{..} = do
+  initialTrackerRequest:: HasConfig e => MetaInfo -> RIO e TrackerRequest
+  initialTrackerRequest MetaInfo{..} = do
     Config (Peer _id  _ip  _port) <- config <$> ask
     return TrackerRequest {
     infoHash = infoHash
@@ -37,29 +41,36 @@ module Tracker where
     , event = Nothing
   }
 
+  getTrackerResponse :: MonadIO m => MetaInfo -> m TrackerResponse
+  getTrackerResponse MetaInfo{..} req = 
+    do
+    request' <- parseRequest "GET " <> getUrl announce
+    request = setRequestQueryString  ( <$> queryString req)
+    
 
   data TrackerResponse = TrackerResponse {
     interval :: Int,
     peers :: [PeerId]
   }
 
-  queryString :: TrackerRequest -> [(String, String)]
+  queryString :: TrackerRequest -> [(BS.ByteString, BS.ByteString)]
   queryString TrackerRequest{..} =
       let 
         eventTuple = case event of 
-          Just evt -> [("event", show evt)]
+          Just evt -> [("event", toByteString evt)]
           Nothing -> []
       in
         [
-          ("info_hash", show infoHash)
-          , ("peer_id", show peerId)
-          , ("ip", show ip)
-          , ("port", show  port)
-          , ("uploaded", show  uploaded)
-          , ("downloaded", show downloaded)
-          , ("left", show bytesLeft)
+          ("info_hash", toByteString infoHash)
+          , ("peer_id", toByteString peerId)
+          , ("ip", toByteString ip)
+          , ("port", toByteString  port)
+          , ("uploaded", toByteString  uploaded)
+          , ("downloaded", toByteString downloaded)
+          , ("left", toByteString bytesLeft)
         ] ++ eventTuple
 
+  
 
   data TrackerEvent = Started | Completed | Stopped
 

@@ -29,7 +29,7 @@ module Protocol.Info where
         path:: ![T.Text] -- position, for a single file it's an empty list, meaning "this directory"
         } deriving (Eq, Show)
 
-    newtype URL = URL T.Text deriving (Eq,Show, BEncoder)
+    newtype URL = URL {getUrl :: T.Text} deriving (Eq, Show, BEncoder)
 
     newtype SHA1Hash = SHA1Hash {sha1Hash:: BS.ByteString} deriving (Eq,Show, BEncoder)
 
@@ -89,9 +89,9 @@ module Protocol.Info where
 
     -- splits the pieces string into chunks of 20 chars
     chunksOf :: Int -> BS.ByteString -> [BS.ByteString]
-    chunksOf i bs =
-        if BS.length bs == 0 then
-            []
-        else
-            let (chunk, remaining) = BS.splitAt i bs
-            in chunk : chunksOf i remaining
+chunksOf i (PS bs1 bs2 bs3) =
+                      if BS.length bs == 0 then
+                          []
+                      else
+                          let (chunk, remaining) = BS.splitAt i bs
+                          in chunk : chunksOf i remaining
